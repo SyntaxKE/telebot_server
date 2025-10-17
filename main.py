@@ -11,8 +11,9 @@ from telegram.ext import (
     ConversationHandler,
 )
 import asyncio
+import nest_asyncio
 
-# --- Flask web server for Render health checks ---
+# --- Simple Flask web server for Render to stay alive ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -21,14 +22,16 @@ def home():
 
 def run_web():
     flask_app.run(host='0.0.0.0', port=8080)
+# --------------------------------------------------------
+
 
 # --- BOT TOKEN ---
 BOT_TOKEN = "8212545907:AAHp6rT8lyJnvR1zjXympN-ci0Q8D3cbitI"
 
-# --- Conversation states ---
+# --- States for Conversation ---
 PAIR, BALANCE, RISK, STOPLOSS, POSITIONS = range(5)
 
-# --- Exchange rates ---
+# --- Approximate exchange rates for dynamic pip calculation ---
 EXCHANGE_RATES = {
     "EURUSD": 1.0,
     "GBPUSD": 1.0,
@@ -51,12 +54,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PAIR
 
 
-# --- Pair selection ---
+# --- Handle pair selection ---
 async def select_pair(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["pair"] = query.data
-    await query.edit_message_text(f"You selected {query.data}. Enter your account balance in USD:")
+    await query.edit_message_text(text=f"You selected {query.data}. Enter your account balance in USD:")
     return BALANCE
 
 
@@ -81,7 +84,7 @@ async def stoploss_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return POSITIONS
 
 
-# --- Position input ---
+# --- Positions input ---
 async def positions_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pair = context.user_data["pair"]
     balance = context.user_data["balance"]
@@ -132,9 +135,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- Main bot ---
+# --- Run bot ---
 async def run_bot():
     print("🤖 Bot is running...")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -153,6 +157,13 @@ async def run_bot():
     await app.run_polling()
 
 
+# --- Main ---
 if __name__ == "__main__":
+    # Run Flask in a background thread
     Thread(target=run_web).start()
-    asyncio.run(run_bot())
+
+    # Allow asyncio reuse for both Flask and Telegram bot
+    nest_asyncio.apply()
+    loop = asyncio.get_event_loop()
+    loop.create_task(run_bot())
+    loop.run_forever()
