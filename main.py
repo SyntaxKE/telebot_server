@@ -10,8 +10,9 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler,
 )
+import asyncio
 
-# --- Simple Flask web server for Render to stay alive ---
+# --- Flask web server for Render health checks ---
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -21,17 +22,13 @@ def home():
 def run_web():
     flask_app.run(host='0.0.0.0', port=8080)
 
-Thread(target=run_web).start()
-# --------------------------------------------------------
-
-
 # --- BOT TOKEN ---
 BOT_TOKEN = "8212545907:AAHp6rT8lyJnvR1zjXympN-ci0Q8D3cbitI"
 
-# --- States for Conversation ---
+# --- Conversation states ---
 PAIR, BALANCE, RISK, STOPLOSS, POSITIONS = range(5)
 
-# --- Approximate exchange rates for dynamic pip calculation ---
+# --- Exchange rates ---
 EXCHANGE_RATES = {
     "EURUSD": 1.0,
     "GBPUSD": 1.0,
@@ -54,12 +51,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PAIR
 
 
-# --- Handle pair selection ---
+# --- Pair selection ---
 async def select_pair(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["pair"] = query.data
-    await query.edit_message_text(text=f"You selected {query.data}. Enter your account balance in USD:")
+    await query.edit_message_text(f"You selected {query.data}. Enter your account balance in USD:")
     return BALANCE
 
 
@@ -84,7 +81,7 @@ async def stoploss_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return POSITIONS
 
 
-# --- Positions input ---
+# --- Position input ---
 async def positions_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pair = context.user_data["pair"]
     balance = context.user_data["balance"]
@@ -135,10 +132,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- Main ---
-def main():
+# --- Main bot ---
+async def run_bot():
     print("🤖 Bot is running...")
-
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -154,8 +150,9 @@ def main():
     )
 
     app.add_handler(conv_handler)
-    app.run_polling()
+    await app.run_polling()
 
 
 if __name__ == "__main__":
-    main()
+    Thread(target=run_web).start()
+    asyncio.run(run_bot())
